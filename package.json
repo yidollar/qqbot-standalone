@@ -19,7 +19,9 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@tencent-connect/qqbot-nodejs": "^1.0.4"
+    "@tencent-connect/qqbot-nodejs": "^1.0.4",
+    "https-proxy-agent": "^9.1.0",
+    "undici": "^8.11.2"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

@@ -13,6 +13,9 @@
  */
 import { QQBotGateway } from './gateway/qqbot-gateway.js';
 import type { ResolvedQQBotAccount } from './types.js';
+import { setupProxy } from './utils/proxy-bootstrap.js';
+
+setupProxy();
 
 const appId = process.env.QQBOT_APP_ID;
 const appSecret = process.env.QQBOT_APP_SECRET;
