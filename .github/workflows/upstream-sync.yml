@@ -1,0 +1,76 @@
+name: upstream-sync
+
+# 监控上游插件更新：拉取 → 剥离 → 构建 → 冒烟 → 自动提交
+# 上游 breaking change 导致任一步失败时自动开 issue
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # 每日 UTC 3:00（北京时间 11:00）
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 检查上游更新并剥离纯净源码
+        id: sync
+        env:
+          NPM_REGISTRY: https://registry.npmjs.org
+        run: node scripts/update-from-upstream.mjs
+
+      - name: 安装依赖 + 构建
+        id: build
+        if: steps.sync.outputs.updated == 'true'
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+      - name: 冒烟测试
+        id: smoke
+        if: steps.sync.outputs.updated == 'true'
+        run: node scripts/smoke.mjs
+
+      - name: 提交并推送
+        id: commit
+        if: >-
+          steps.sync.outputs.updated == 'true' &&
+          steps.build.outcome == 'success' &&
+          steps.smoke.outcome == 'success'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m "chore: sync upstream openclaw-qqbot v${{ steps.sync.outputs.new }}"
+          git push
+
+      - name: 失败时自动开 issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ver = '${{ steps.sync.outputs.new }}' || 'unknown';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `上游同步失败: openclaw-qqbot v${ver}`,
+              body: [
+                `自动剥离/构建/冒烟测试未通过，可能为上游 breaking change，请人工检查剥离方案。`,
+                `[运行日志](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+                ``,
+                `- 剥离阶段: ${{ steps.sync.outcome }}`,
+                `- 构建/安装: ${{ steps.build.outcome || 'skipped' }}`,
+                `- 冒烟测试: ${{ steps.smoke.outcome || 'skipped' }}`,
+                `- 提交推送: ${{ steps.commit.outcome || 'skipped' }}`,
+              ].join('\n'),
+              labels: ['upstream-sync'],
+            });
